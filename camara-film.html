@@ -199,11 +199,11 @@ let timerSec=0;
 // ===== RECETAS: parámetros que el shader usa para emular cada película =====
 // cada receta define: temperatura, viraje de sombras/luces, saturación, contraste, halación, grano
 const recipes=[
-  {name:'Standard', temp:0.0,  tint:0.0,  gamma:1.0,  sat:1.10, con:1.08, bloom:0.10, grain:0.025, sharp:0.25, vib:0.15, splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0},
-  {name:'Classic',  temp:-0.01,tint:0.0,  gamma:1.0,  sat:0.88, con:1.20, bloom:0.16, grain:0.05,  sharp:0.30, vib:0.12, splitS:[-0.02,0.0,0.04], splitH:[0.05,0.03,-0.02], warmth:0.02},
-  {name:'Summer',   temp:0.03, tint:-0.008,gamma:0.94,sat:1.34, con:1.12, bloom:0.22, grain:0.04,  sharp:0.20, vib:0.30, splitS:[0.01,0.02,-0.03],splitH:[0.07,0.04,-0.05], warmth:0.05},
-  {name:'Portrait', temp:0.022,tint:0.012, gamma:0.96, sat:1.14, con:1.08, bloom:0.20, grain:0.035, sharp:0.18, vib:0.26, splitS:[0.025,0.005,-0.01],splitH:[0.06,0.035,-0.03],warmth:0.04},
-  {name:'Mono',     temp:0.0,  tint:0.0,  gamma:1.0,  sat:0.0,  con:1.28, bloom:0.18, grain:0.07,  sharp:0.30, vib:0.0,  splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0}
+  {name:'Standard', temp:0.0,  tint:0.0,  gamma:1.0,  sat:1.10, con:1.10, glow:0.035,grain:0.022, sharp:0.30, vib:0.15, splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0},
+  {name:'Classic',  temp:-0.006,tint:0.0, gamma:1.0,  sat:0.90, con:1.20, glow:0.04, grain:0.045, sharp:0.35, vib:0.12, splitS:[-0.01,0.0,0.02], splitH:[0.015,0.01,-0.008],warmth:0.0},
+  {name:'Summer',   temp:0.01, tint:-0.004,gamma:0.96,sat:1.22, con:1.12, glow:0.055,grain:0.035, sharp:0.28, vib:0.26, splitS:[0.005,0.008,-0.012],splitH:[0.02,0.012,-0.018],warmth:0.018},
+  {name:'Portrait', temp:0.005,tint:0.005, gamma:0.98, sat:1.10, con:1.08, glow:0.05, grain:0.030, sharp:0.25, vib:0.22, splitS:[0.008,0.002,-0.005],splitH:[0.018,0.01,-0.012],warmth:0.013},
+  {name:'Mono',     temp:0.0,  tint:0.0,  gamma:1.0,  sat:0.0,  con:1.26, glow:0.04, grain:0.06,  sharp:0.35, vib:0.0,  splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0}
 ];
 let recipeIdx=1;
 function curRecipe(){return recipes[recipeIdx];}
@@ -226,7 +226,7 @@ uniform float uTime;
 uniform float uBright;
 uniform float uZoom;
 uniform float uFlipX;
-uniform float uTemp, uTint, uSat, uCon, uGamma, uGrain, uSharp, uVib, uBloom, uWarmth;
+uniform float uTemp, uTint, uSat, uCon, uGamma, uGrain, uSharp, uVib, uGlow, uWarmth;
 uniform vec3 uSplitS, uSplitH;
 
 float rand(vec2 c){return fract(sin(dot(c,vec2(12.9898,78.233)))*43758.5453);}
@@ -241,73 +241,69 @@ void main(){
   vec3 col=texture2D(uTex,uv).rgb;
   vec2 px=1.0/uRes;
 
-  // sharpen leve
+  // sharpen leve (seguro)
   if(uSharp>0.001){
     vec3 blur=texture2D(uTex,uv+vec2(px.x,0.0)).rgb+texture2D(uTex,uv-vec2(px.x,0.0)).rgb
              +texture2D(uTex,uv+vec2(0.0,px.y)).rgb+texture2D(uTex,uv-vec2(0.0,px.y)).rgb;
     blur*=0.25; col=col+(col-blur)*uSharp;
   }
 
-  // === BLOOM CCD: las luces brillantes sangran un glow suave (alma del look CCD/film) ===
-  if(uBloom>0.001){
-    vec3 glow=vec3(0.0); float tot=0.0;
-    for(int i=-3;i<=3;i++){
-      for(int j=-3;j<=3;j++){
-        vec2 off=vec2(float(i),float(j))*px*3.5;
-        vec3 s=texture2D(uTex,uv+off).rgb;
-        float sl=luma(s);
-        float w=smoothstep(0.6,1.0,sl); // luces medias-altas, no solo quemadas
-        float dist=1.0-length(vec2(float(i),float(j)))/5.0;
-        w*=max(dist,0.0);
-        glow+=s*w; tot+=w;
-      }
-    }
-    if(tot>0.01){ glow/=tot;
-      // el glow es cálido (tinte dorado característico CCD)
-      glow*=vec3(1.0,0.92,0.78);
-      col+=glow*uBloom;
-    }
-  }
-
   // exposición
   col*=uBright;
-  // temperatura
+  // temperatura (suave)
   col.r+=uTemp; col.b-=uTemp; col.g+=uTint;
-  // calidez global sutil
-  col.r+=uWarmth*0.5; col.b-=uWarmth*0.5;
   col=clamp(col,0.0,1.0);
 
-  // contraste
+  // contraste filmico (S-curve suave)
   col=clamp((col-0.5)*uCon+0.5, 0.0, 1.0);
 
-  // HIGHLIGHT ROLL-OFF cálido: las luces altas se funden suave con tinte (no blanco plano)
-  float hl=smoothstep(0.7,1.0,luma(col));
-  col=mix(col, col*vec3(1.02,0.99,0.94), hl*0.5);
+  // calidez SOLO en luces altas (deja paredes/neutros limpios)
+  if(uWarmth>0.0001){
+    float hlw=smoothstep(0.55,1.0,luma(col));
+    col.r+=uWarmth*hlw;
+    col.b-=uWarmth*hlw*0.8;
+    col=clamp(col,0.0,1.0);
+  }
+
+  // GLOW CCD seguro: multi-muestra suave, sin manchas, solo en luces brillantes
+  if(uGlow>0.001){
+    float r1=3.0, r2=6.0;
+    vec3 b=(texture2D(uTex,uv+vec2(r1,r1)*px).rgb+texture2D(uTex,uv+vec2(-r1,r1)*px).rgb
+           +texture2D(uTex,uv+vec2(r1,-r1)*px).rgb+texture2D(uTex,uv+vec2(-r1,-r1)*px).rgb)*0.18;
+    b+=(texture2D(uTex,uv+vec2(r2,0.0)*px).rgb+texture2D(uTex,uv+vec2(-r2,0.0)*px).rgb
+       +texture2D(uTex,uv+vec2(0.0,r2)*px).rgb+texture2D(uTex,uv+vec2(0.0,-r2)*px).rgb)*0.07;
+    float bl=luma(b);
+    float mask=smoothstep(0.55,0.9,bl);
+    col+=b*vec3(1.0,0.94,0.84)*mask*uGlow;
+  }
+
+  // highlight roll-off cálido (las luces no se queman a blanco plano)
+  float hl=smoothstep(0.72,1.0,luma(col));
+  col=mix(col, col*vec3(1.015,0.995,0.95), hl*0.5);
 
   // gamma
-  col=pow(col, vec3(1.0/uGamma));
+  col=pow(clamp(col,0.0,1.0), vec3(1.0/uGamma));
 
   // saturación
-  vec3 g=vec3(luma(col));
-  col=mix(g,col,uSat);
+  col=mix(vec3(luma(col)),col,uSat);
 
-  // vibrance
+  // vibrance (realza apagados, respeta saturados)
   if(uVib>0.001){
     float mx=max(max(col.r,col.g),col.b), mn=min(min(col.r,col.g),col.b);
     float v=uVib*(1.0-(mx-mn));
     col=mix(vec3(luma(col)),col,1.0+v);
   }
 
-  // split-toning
+  // split-toning: sombras y SOLO luces muy altas (no paredes medio-claras)
   float lt=luma(col);
-  col+=uSplitS*(1.0-smoothstep(0.0,0.5,lt));
-  col+=uSplitH*smoothstep(0.5,1.0,lt);
+  col+=uSplitS*(1.0-smoothstep(0.0,0.45,lt));
+  col+=uSplitH*smoothstep(0.72,1.0,lt);
 
-  // grano
-  vec2 gco=vUV*uRes;
-  float n1=rand(gco+uTime), n2=rand(gco*0.5-uTime*0.7);
-  float gr=((n1*0.6+n2*0.4)-0.5)*uGrain;
-  gr*=(0.4+0.6*(1.0-abs(luma(col)-0.45)*1.6));
+  // grano film (estable, no titila)
+  vec2 gco=floor(vUV*uRes*0.8);
+  float gnoise=rand(gco+floor(uTime*8.0)*0.5);
+  float gr=(gnoise-0.5)*uGrain;
+  gr*=(0.5+0.5*(1.0-abs(luma(col)-0.45)*1.5));
   col+=gr;
 
   col=clamp(col,0.0,1.0);
@@ -359,7 +355,7 @@ function render(t){
     gl.uniform1f(U('uSat'),r.sat);gl.uniform1f(U('uCon'),r.con);
     gl.uniform1f(U('uGamma'),r.gamma);gl.uniform1f(U('uSharp'),r.sharp);
     gl.uniform1f(U('uGrain'),r.grain);gl.uniform1f(U('uVib'),r.vib);
-    gl.uniform1f(U('uBloom'),r.bloom);gl.uniform1f(U('uWarmth'),r.warmth);
+    gl.uniform1f(U('uGlow'),r.glow);gl.uniform1f(U('uWarmth'),r.warmth);
     gl.uniform3fv(U('uSplitS'),r.splitS);gl.uniform3fv(U('uSplitH'),r.splitH);
     gl.drawArrays(gl.TRIANGLES,0,6);
   }
