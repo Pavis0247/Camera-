@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cámara</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+:root{--lav:#A99CE0;--rosa:#F23B8C}
+html,body{height:100%;background:#000;font-family:'Poppins',sans-serif;color:#fff;overflow:hidden;position:fixed;width:100%}
+.phone{position:relative;width:100%;height:100%;max-width:480px;margin:0 auto;background:#000;overflow:hidden}
+
+#video{display:none}
+/* el canvas WebGL es lo que se ve */
+#glcanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#snapcanvas{display:none}
+
+.fade{position:absolute;left:0;right:0;bottom:0;height:400px;z-index:5;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(0,0,0,.4) 35%,rgba(0,0,0,.72) 68%,rgba(0,0,0,.92) 100%)}
+
+.flashfx{position:absolute;inset:0;background:#fff;opacity:0;z-index:30;pointer-events:none}
+.flashfx.go{animation:cap .35s ease}
+@keyframes cap{0%{opacity:0}30%{opacity:.85}100%{opacity:0}}
+
+.focus{position:absolute;z-index:7;width:56px;height:56px;border:1.5px solid var(--rosa);border-radius:5px;
+  opacity:0;pointer-events:none;transform:translate(-50%,-50%)}
+.focus i{position:absolute;background:var(--rosa)}
+.focus .t{width:1px;height:8px;left:50%;top:-9px;transform:translateX(-50%)}
+.focus .b{width:1px;height:8px;left:50%;bottom:-9px;transform:translateX(-50%)}
+.focus .l{height:1px;width:8px;top:50%;left:-9px;transform:translateY(-50%)}
+.focus .r{height:1px;width:8px;top:50%;right:-9px;transform:translateY(-50%)}
+.focus.go{animation:foc .9s ease}
+@keyframes foc{0%{opacity:0;transform:translate(-50%,-50%) scale(1.3)}15%{opacity:1;transform:translate(-50%,-50%) scale(1)}70%{opacity:1}100%{opacity:0}}
+
+.recipe-top{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:10;
+  font-size:12px;font-weight:500;letter-spacing:.5px;color:#fff;display:flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,.09);backdrop-filter:blur(20px) saturate(1.4);
+  padding:7px 15px;border-radius:20px;border:1px solid rgba(255,255,255,.14)}
+.recipe-top .pd{width:6px;height:6px;border-radius:50%;background:var(--lav);box-shadow:0 0 8px var(--lav)}
+
+.recipe-flash{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);z-index:9;
+  font-size:30px;font-weight:600;letter-spacing:1px;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,.6);opacity:0}
+.recipe-flash.go{animation:rf 1s ease}
+@keyframes rf{0%{opacity:0}20%{opacity:1}75%{opacity:1}100%{opacity:0}}
+
+.toolcol{position:absolute;right:14px;bottom:60px;z-index:12;display:flex;flex-direction:column;align-items:center;gap:10px}
+.toolcol .tools{display:flex;flex-direction:column;gap:10px;transition:.25s}
+.toolcol .tools.hidden{opacity:0;transform:translateY(12px);pointer-events:none}
+.toolcol .tl{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.1);
+  backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center}
+.toolcol .tl svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.6}
+.toolcol .tl.on{background:rgba(242,59,140,.25);border-color:var(--rosa)}
+.toolcol .tl.on svg{stroke:var(--rosa)}
+.toolcol .chev{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.14);
+  backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+.toolcol .chev svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2;transition:transform .25s}
+.toolcol .chev.open svg{transform:rotate(180deg)}
+
+.stack{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:12;
+  display:flex;flex-direction:column;align-items:stretch;gap:12px;width:226px}
+.island{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  background:rgba(255,255,255,.1);backdrop-filter:blur(26px) saturate(1.5);
+  border:1px solid rgba(255,255,255,.22);border-radius:44px;padding:11px 18px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
+.gal{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex:none;
+  overflow:hidden;background-size:cover;background-position:center}
+.gal svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:1.8}
+.shutter{flex:1;height:54px;border-radius:30px;background:rgba(255,255,255,.16);
+  border:1.5px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.shutter .dot{width:16px;height:16px;border-radius:50%;background:var(--lav);position:relative;box-shadow:0 0 10px var(--lav);transition:.2s}
+.shutter .dot::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--lav);animation:halo 1.8s ease-out infinite}
+@keyframes halo{0%{transform:scale(1);opacity:.5}100%{transform:scale(2);opacity:0}}
+.shutter:active{transform:scale(.97)}
+.shutter.rec .dot{width:20px;height:20px;border-radius:5px;background:var(--rosa);box-shadow:0 0 14px var(--rosa)}
+.shutter.rec .dot::after{display:none}
+
+.lowrow{display:flex;align-items:center;gap:8px}
+.bright{display:flex;align-items:center;gap:9px;flex:1;min-width:0;
+  background:rgba(255,255,255,.08);backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:10px 13px}
+.bright>svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.6;flex:none;opacity:.8}
+.bright .track{flex:1;height:3px;border-radius:3px;background:rgba(255,255,255,.25);position:relative;min-width:0}
+.bright .track i{position:absolute;top:50%;transform:translate(-50%,-50%);left:50%;
+  width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
+.zoom{display:flex;gap:1px;background:rgba(255,255,255,.08);backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:4px;flex:none}
+.zoom .z{min-width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:9.5px;font-weight:500;color:#ddd}
+.zoom .z.on{background:rgba(255,255,255,.2);color:#fff}
+
+.modes{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:12;display:flex;gap:22px}
+.modes .md{font-size:11px;font-weight:600;letter-spacing:2px;color:#777;text-transform:uppercase;position:relative}
+.modes .md.on{color:#fff}
+.modes .md.on::after{content:"";position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--lav)}
+
+.rectime{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:11;
+  display:none;align-items:center;gap:7px;background:rgba(242,59,140,.9);padding:6px 13px;border-radius:16px;
+  font-size:12px;font-weight:600;letter-spacing:.5px}
+.rectime.on{display:flex}
+.rectime .rd{width:8px;height:8px;border-radius:50%;background:#fff;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.gate{position:absolute;inset:0;z-index:40;background:#000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;padding:40px;text-align:center}
+.gate.hide{display:none}
+.gate h2{font-size:18px;font-weight:600}
+.gate p{font-size:13px;color:#999;line-height:1.6;max-width:300px}
+.gate button{margin-top:8px;background:var(--lav);color:#000;border:none;padding:13px 28px;
+  border-radius:24px;font-family:'Poppins';font-size:14px;font-weight:600}
+.gate .ic{width:54px;height:54px;border-radius:50%;background:rgba(169,156,224,.2);
+  display:flex;align-items:center;justify-content:center}
+.gate .ic svg{width:26px;height:26px;stroke:var(--lav);fill:none;stroke-width:1.6}
+
+.viewer{position:absolute;inset:0;z-index:50;background:#000;display:none;flex-direction:column}
+.viewer.on{display:flex}
+.viewer .vtop{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;z-index:2}
+.viewer .vtop button{background:rgba(255,255,255,.12);border:none;color:#fff;width:40px;height:40px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center}
+.viewer .vtop button svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:1.8}
+.viewer .vimg{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:0 10px 20px}
+.viewer .vimg img,.viewer .vimg video{max-width:100%;max-height:100%;border-radius:12px}
+.viewer .vempty{color:#666;font-size:14px}
+.tempPanel{position:absolute;inset:0;z-index:25;display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(8px)}
+.tempPanel.on{display:flex}
+.tempDial{position:relative;width:200px;height:200px}
+.tempDial svg{width:100%;height:100%;touch-action:none}
+#tempKnob{cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+.tempCenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.tempVal{font-size:38px;font-weight:600;color:#fff;line-height:1}
+.tempLbl{font-size:11px;color:#aaa;letter-spacing:1px;margin-top:4px}
+.tempHint{font-size:13px;color:#ddd;letter-spacing:.5px}
+.tempReset{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;
+  padding:10px 22px;border-radius:22px;font-family:'Poppins';font-size:13px;font-weight:500}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="glcanvas"></canvas>
+  <canvas id="snapcanvas"></canvas>
+
+  <div class="fade"></div>
+  <div class="flashfx" id="flashfx"></div>
+  <div class="focus" id="focus"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+
+  <div class="recipe-top"><span class="pd"></span><span id="recipeName">Classic</span></div>
+  <div class="recipe-flash" id="recipeFlash"></div>
+  <div class="rectime" id="rectime"><span class="rd"></span><span id="rectimeText">0:00</span></div>
+
+  <div class="toolcol">
+    <div class="tools hidden" id="tools">
+      <div class="tl" id="tempBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></div>
+      <div class="tl" id="flashBtn"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></div>
+      <div class="tl" id="timerBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg></div>
+      <div class="tl" id="gridBtn"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></div>
+    </div>
+    <div class="chev" id="chev"><svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg></div>
+  </div>
+
+  <div class="stack">
+    <div class="island">
+      <div class="gal" id="galBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14c1 1.3 2 2 3.5 2s2.5-.7 3.5-2"/><circle cx="9" cy="10" r="1" fill="#fff" stroke="none"/><circle cx="15" cy="10" r="1" fill="#fff" stroke="none"/></svg></div>
+      <div class="shutter" id="shutter"><div class="dot"></div></div>
+    </div>
+    <div class="lowrow">
+      <div class="bright">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+        <div class="track" id="brightTrack"><i id="brightDot"></i></div>
+      </div>
+      <div class="zoom" id="zoom"><div class="z" data-z=".5">.5</div><div class="z on" data-z="1">1×</div><div class="z" data-z="2">2</div></div>
+    </div>
+  </div>
+
+  <div class="modes" id="modes">
+    <div class="md on" data-m="photo">Foto</div>
+    <div class="md" data-m="video">Vídeo</div>
+  </div>
+
+  <div class="tempPanel" id="tempPanel">
+    <div class="tempDial" id="tempDial">
+      <svg viewBox="0 0 200 200" id="tempDialSvg">
+        <defs>
+          <linearGradient id="tempGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#6BB5FF"/>
+            <stop offset="50%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#FFB35C"/>
+          </linearGradient>
+        </defs>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="10"/>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="url(#tempGrad)" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="368 490" transform="rotate(126 100 100)"/>
+        <circle id="tempKnob" cx="100" cy="22" r="11" fill="#fff" stroke="rgba(0,0,0,.2)" stroke-width="1"/>
+      </svg>
+      <div class="tempCenter">
+        <div class="tempVal" id="tempVal">0</div>
+        <div class="tempLbl">temperatura</div>
+      </div>
+    </div>
+    <div class="tempHint">❄️ frío &nbsp;·&nbsp; cálido ☀️</div>
+    <button class="tempReset" id="tempReset">Restablecer</button>
+  </div>
+
+  <div class="gate" id="gate">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 18a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2z"/><circle cx="12" cy="12.5" r="3.2"/></svg></div>
+    <h2 id="gateTitle">Toca para empezar</h2>
+    <p id="gateText">Necesito permiso para usar tu cámara. Al tocar el botón, tu teléfono te preguntará — toca "Permitir".</p>
+    <button id="startBtn">Encender cámara</button>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div class="vtop">
+      <button id="closeViewer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button id="dlBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 4 5-4M5 21h14"/></svg></button>
+    </div>
+    <div class="vimg" id="vimg"><div class="vempty">Aún no has tomado fotos</div></div>
+  </div>
+
+</div>
+
+<script>
+const video=document.getElementById('video');
+const glcanvas=document.getElementById('glcanvas');
+const gate=document.getElementById('gate');
+const startBtn=document.getElementById('startBtn');
+const gateTitle=document.getElementById('gateTitle');
+const gateText=document.getElementById('gateText');
+
+let stream=null, facing='environment', photoMode=true, brightness=1.0, zoomLevel=1, userTemp=0.0;
+let lastPhoto=null, lastIsVideo=false, recording=false, mediaRecorder=null, recChunks=[], recInterval=null, recSeconds=0;
+let timerSec=0;
+
+// ===== RECETAS: parámetros que el shader usa para emular cada película =====
+// cada receta define: temperatura, viraje de sombras/luces, saturación, contraste, halación, grano
+const recipes=[
+  {name:'Standard', temp:0.0,  tint:0.0,  gamma:1.0,  sat:1.10, con:1.10, glow:0.035,grain:0.022, sharp:0.30, vib:0.15, splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0},
+  {name:'Classic',  temp:-0.006,tint:0.0, gamma:1.0,  sat:0.90, con:1.20, glow:0.04, grain:0.045, sharp:0.35, vib:0.12, splitS:[-0.01,0.0,0.02], splitH:[0.015,0.01,-0.008],warmth:0.0},
+  {name:'Summer',   temp:0.01, tint:-0.004,gamma:0.96,sat:1.22, con:1.12, glow:0.055,grain:0.035, sharp:0.28, vib:0.26, splitS:[0.005,0.008,-0.012],splitH:[0.02,0.012,-0.018],warmth:0.018},
+  {name:'Portrait', temp:0.005,tint:0.005, gamma:0.98, sat:1.10, con:1.08, glow:0.05, grain:0.030, sharp:0.25, vib:0.22, splitS:[0.008,0.002,-0.005],splitH:[0.018,0.01,-0.012],warmth:0.013},
+  {name:'Mono',     temp:0.0,  tint:0.0,  gamma:1.0,  sat:0.0,  con:1.26, glow:0.04, grain:0.06,  sharp:0.35, vib:0.0,  splitS:[0,0,0],          splitH:[0,0,0],           warmth:0.0}
+];
+let recipeIdx=1;
+function curRecipe(){return recipes[recipeIdx];}
+function updateRecipeName(){document.getElementById('recipeName').textContent=curRecipe().name;}
+function flashRecipeName(){const f=document.getElementById('recipeFlash');f.textContent=curRecipe().name;
+  f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
+
+// ===== WEBGL =====
+let gl, program, tex, posBuf, uvBuf, animId;
+const VERT=`
+attribute vec2 aPos; attribute vec2 aUV; varying vec2 vUV;
+uniform float uFlipX;
+void main(){ vUV=aUV; vec2 p=aPos; gl_Position=vec4(p,0.0,1.0); }`;
+const FRAG=`
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uRes;
+uniform float uTime;
+uniform float uBright;
+uniform float uZoom;
+uniform float uFlipX;
+uniform float uTemp, uTint, uSat, uCon, uGamma, uGrain, uSharp, uVib, uGlow, uWarmth, uUserTemp;
+uniform vec3 uSplitS, uSplitH;
+
+float rand(vec2 c){return fract(sin(dot(c,vec2(12.9898,78.233)))*43758.5453);}
+float luma(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
+
+void main(){
+  vec2 uv=vUV;
+  if(uFlipX>0.5) uv.x=1.0-uv.x;
+  vec2 ctr=vec2(0.5);
+  uv=(uv-ctr)/uZoom + ctr;
+
+  vec3 col=texture2D(uTex,uv).rgb;
+  // px normalizado a una resolución de referencia (1080) para que el glow/sharpen
+  // se vean IGUAL en el visor (pantalla pequeña) y en la foto (resolución completa)
+  float refScale=uRes.y/1080.0;
+  vec2 px=(1.0/uRes)*refScale;
+
+  // sharpen leve (seguro)
+  if(uSharp>0.001){
+    vec3 blur=texture2D(uTex,uv+vec2(px.x,0.0)).rgb+texture2D(uTex,uv-vec2(px.x,0.0)).rgb
+             +texture2D(uTex,uv+vec2(0.0,px.y)).rgb+texture2D(uTex,uv-vec2(0.0,px.y)).rgb;
+    blur*=0.25; col=col+(col-blur)*uSharp;
+  }
+
+  // exposición
+  col*=uBright;
+  // temperatura (receta + ajuste manual del usuario)
+  float tmp=uTemp+uUserTemp;
+  col.r+=tmp; col.b-=tmp; col.g+=uTint;
+  col=clamp(col,0.0,1.0);
+
+  // contraste filmico (S-curve suave)
+  col=clamp((col-0.5)*uCon+0.5, 0.0, 1.0);
+
+  // calidez SOLO en luces altas (deja paredes/neutros limpios)
+  if(uWarmth>0.0001){
+    float hlw=smoothstep(0.55,1.0,luma(col));
+    col.r+=uWarmth*hlw;
+    col.b-=uWarmth*hlw*0.8;
+    col=clamp(col,0.0,1.0);
+  }
+
+  // GLOW CCD sin manchas: 12 muestras en círculo + pre-máscara de luces.
+  // El glow solo nace de zonas brillantes y se desvanece suave (cremoso, sin bordes).
+  if(uGlow>0.001){
+    // pre-mascarar: solo las luces brillantes contribuyen al glow
+    float Lc=luma(col);
+    vec3 brightHere=col*smoothstep(0.62,0.9,Lc);
+    vec3 glow=vec3(0.0); float tot=0.0;
+    // anillo interno (radio 6px, 6 muestras)
+    for(int k=0;k<6;k++){
+      float a=6.2831853*float(k)/6.0;
+      vec2 o=vec2(cos(a),sin(a))*6.0*px;
+      vec3 s=texture2D(uTex,uv+o).rgb;
+      glow+=s*smoothstep(0.62,0.9,luma(s))*1.0; tot+=1.0;
+    }
+    // anillo externo (radio 12px, 6 muestras, peso menor)
+    for(int k=0;k<6;k++){
+      float a=6.2831853*float(k)/6.0+0.5;
+      vec2 o=vec2(cos(a),sin(a))*12.0*px;
+      vec3 s=texture2D(uTex,uv+o).rgb;
+      glow+=s*smoothstep(0.62,0.9,luma(s))*0.6; tot+=0.6;
+    }
+    glow/=tot;
+    col+=glow*vec3(1.0,0.94,0.84)*uGlow*4.0;
+  }
+
+  // highlight roll-off cálido (las luces no se queman a blanco plano)
+  float hl=smoothstep(0.72,1.0,luma(col));
+  col=mix(col, col*vec3(1.015,0.995,0.95), hl*0.5);
+
+  // gamma
+  col=pow(clamp(col,0.0,1.0), vec3(1.0/uGamma));
+
+  // saturación
+  col=mix(vec3(luma(col)),col,uSat);
+
+  // vibrance (realza apagados, respeta saturados)
+  if(uVib>0.001){
+    float mx=max(max(col.r,col.g),col.b), mn=min(min(col.r,col.g),col.b);
+    float v=uVib*(1.0-(mx-mn));
+    col=mix(vec3(luma(col)),col,1.0+v);
+  }
+
+  // split-toning: sombras y SOLO luces muy altas (no paredes medio-claras)
+  float lt=luma(col);
+  col+=uSplitS*(1.0-smoothstep(0.0,0.45,lt));
+  col+=uSplitH*smoothstep(0.72,1.0,lt);
+
+  // grano film (estable, escala fija para verse igual en visor y foto)
+  vec2 gco=floor(vUV*vec2(1080.0)*0.8);
+  float gnoise=rand(gco+floor(uTime*8.0)*0.5);
+  float gr=(gnoise-0.5)*uGrain;
+  gr*=(0.5+0.5*(1.0-abs(luma(col)-0.45)*1.5));
+  col+=gr;
+
+  col=clamp(col,0.0,1.0);
+  gl_FragColor=vec4(col,1.0);
+}`;
+
+function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(s));return null;}return s;}
+
+function initGL(){
+  const glopts={preserveDrawingBuffer:true, antialias:false};
+  gl=glcanvas.getContext('webgl',glopts)||glcanvas.getContext('experimental-webgl',glopts);
+  if(!gl){alert('Tu navegador no soporta WebGL.');return false;}
+  const vs=compile(gl.VERTEX_SHADER,VERT), fs=compile(gl.FRAGMENT_SHADER,FRAG);
+  program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS)){console.error(gl.getProgramInfoLog(program));return false;}
+  gl.useProgram(program);
+  posBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]),gl.STATIC_DRAW);
+  const aPos=gl.getAttribLocation(program,'aPos');gl.enableVertexAttribArray(aPos);gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+  uvBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,uvBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,1, 1,1, 0,0, 0,0, 1,1, 1,0]),gl.STATIC_DRAW);
+  const aUV=gl.getAttribLocation(program,'aUV');gl.enableVertexAttribArray(aUV);gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,0,0);
+  tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  return true;
+}
+
+function U(n){return gl.getUniformLocation(program,n);}
+function render(t){
+  if(video.readyState>=2){
+    const vw=video.videoWidth, vh=video.videoHeight;
+    // ajustar canvas al tamaño de pantalla manteniendo cover
+    const cw=glcanvas.clientWidth, ch=glcanvas.clientHeight;
+    if(glcanvas.width!==cw||glcanvas.height!==ch){glcanvas.width=cw;glcanvas.height=ch;}
+    gl.viewport(0,0,glcanvas.width,glcanvas.height);
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
+    const r=curRecipe();
+    gl.uniform2f(U('uRes'),glcanvas.width,glcanvas.height);
+    gl.uniform1f(U('uTime'),t*0.001);
+    gl.uniform1f(U('uBright'),brightness);
+    gl.uniform1f(U('uZoom'),zoomLevel);
+    gl.uniform1f(U('uFlipX'),facing==='user'?1.0:0.0);
+    gl.uniform1f(U('uTemp'),r.temp);gl.uniform1f(U('uTint'),r.tint);
+    gl.uniform1f(U('uUserTemp'),userTemp);
+    gl.uniform1f(U('uSat'),r.sat);gl.uniform1f(U('uCon'),r.con);
+    gl.uniform1f(U('uGamma'),r.gamma);gl.uniform1f(U('uSharp'),r.sharp);
+    gl.uniform1f(U('uGrain'),r.grain);gl.uniform1f(U('uVib'),r.vib);
+    gl.uniform1f(U('uGlow'),r.glow);gl.uniform1f(U('uWarmth'),r.warmth);
+    gl.uniform3fv(U('uSplitS'),r.splitS);gl.uniform3fv(U('uSplitH'),r.splitH);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+  animId=requestAnimationFrame(render);
+}
+
+async function startCamera(){
+  try{
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:!photoMode});
+    video.srcObject=stream;
+    await video.play();
+    gate.classList.add('hide');
+    if(!gl){ if(!initGL())return; }
+    if(!animId) animId=requestAnimationFrame(render);
+    updateRecipeName();
+  }catch(err){
+    gate.classList.remove('hide');
+    gateTitle.textContent='No pude acceder a la cámara';
+    if(err.name==='NotAllowedError') gateText.textContent='El permiso está bloqueado. Toca el candado 🔒 junto a la dirección → Permisos → Cámara → Permitir, y recarga.';
+    else gateText.textContent='Error: '+err.message;
+    startBtn.textContent='Reintentar';
+  }
+}
+startBtn.addEventListener('click',startCamera);
+
+// ---- captura ----
+function takePhoto(){
+  // forzar un render fresco para que la captura sea idéntica a lo que se ve
+  if(video.readyState>=2){
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
+    const r=curRecipe();
+    gl.uniform2f(U('uRes'),glcanvas.width,glcanvas.height);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+  const sc=document.getElementById('snapcanvas');
+  sc.width=glcanvas.width; sc.height=glcanvas.height;
+  sc.getContext('2d').drawImage(glcanvas,0,0);
+  lastPhoto=sc.toDataURL('image/jpeg',0.95); lastIsVideo=false;
+  const g=document.getElementById('galBtn'); g.style.backgroundImage=`url(${lastPhoto})`; g.innerHTML='';
+  const fx=document.getElementById('flashfx');fx.classList.remove('go');void fx.offsetWidth;fx.classList.add('go');
+}
+
+const shutter=document.getElementById('shutter');
+shutter.addEventListener('click',()=>{
+  if(photoMode){ if(timerSec>0) runTimer(takePhoto); else takePhoto(); }
+  else toggleRecording();
+});
+
+// ---- grabación: capturar el canvas filtrado ----
+function toggleRecording(){
+  if(!recording){
+    const cstream=glcanvas.captureStream(30);
+    // añadir audio del micro
+    if(stream.getAudioTracks().length) cstream.addTrack(stream.getAudioTracks()[0]);
+    recChunks=[];
+    try{
+      mediaRecorder=new MediaRecorder(cstream,{mimeType:'video/webm'});
+      mediaRecorder.ondataavailable=e=>{if(e.data.size)recChunks.push(e.data)};
+      mediaRecorder.onstop=()=>{const blob=new Blob(recChunks,{type:'video/webm'});
+        lastPhoto=URL.createObjectURL(blob);lastIsVideo=true;
+        const g=document.getElementById('galBtn');g.style.backgroundImage='none';
+        g.innerHTML='<svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:#fff;fill:none;stroke-width:1.8"><path d="M8 5v14l11-7z"/></svg>';};
+      mediaRecorder.start();recording=true;shutter.classList.add('rec');
+      document.getElementById('rectime').classList.add('on');recSeconds=0;
+      recInterval=setInterval(()=>{recSeconds++;const m=Math.floor(recSeconds/60),s=recSeconds%60;
+        document.getElementById('rectimeText').textContent=`${m}:${s<10?'0':''}${s}`;},1000);
+    }catch(e){alert('Grabación no soportada: '+e.message);}
+  }else{
+    mediaRecorder.stop();recording=false;shutter.classList.remove('rec');
+    document.getElementById('rectime').classList.remove('on');clearInterval(recInterval);
+  }
+}
+
+// ---- gestos en el canvas ----
+let lastTap=0;
+glcanvas.addEventListener('click',e=>{
+  const now=Date.now();
+  if(now-lastTap<300){ facing=facing==='environment'?'user':'environment'; startCamera(); }
+  else showFocus(e.clientX,e.clientY);
+  lastTap=now;
+});
+function showFocus(x,y){const f=document.getElementById('focus');
+  const rect=document.querySelector('.phone').getBoundingClientRect();
+  f.style.left=(x-rect.left)+'px';f.style.top=(y-rect.top)+'px';
+  f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
+
+// deslizar para cambiar receta
+let touchX=null;
+const phone=document.querySelector('.phone');
+phone.addEventListener('touchstart',e=>{touchX=e.touches[0].clientX},{passive:true});
+phone.addEventListener('touchend',e=>{
+  if(touchX===null)return;
+  const dx=e.changedTouches[0].clientX-touchX;
+  if(Math.abs(dx)>60){
+    if(dx<0)recipeIdx=(recipeIdx+1)%recipes.length;
+    else recipeIdx=(recipeIdx-1+recipes.length)%recipes.length;
+    updateRecipeName();flashRecipeName();
+  }
+  touchX=null;
+});
+
+// brillo
+const track=document.getElementById('brightTrack'),bdot=document.getElementById('brightDot');
+function setBright(cx){const r=track.getBoundingClientRect();let p=(cx-r.left)/r.width;p=Math.max(0,Math.min(1,p));
+  bdot.style.left=(p*100)+'%';brightness=0.6+p*0.9;}
+let bdrag=false;
+track.addEventListener('touchstart',e=>{bdrag=true;setBright(e.touches[0].clientX)},{passive:true});
+track.addEventListener('touchmove',e=>{if(bdrag)setBright(e.touches[0].clientX)},{passive:true});
+track.addEventListener('touchend',()=>bdrag=false);
+track.addEventListener('mousedown',e=>{bdrag=true;setBright(e.clientX)});
+window.addEventListener('mousemove',e=>{if(bdrag)setBright(e.clientX)});
+window.addEventListener('mouseup',()=>bdrag=false);
+
+// zoom (digital en shader + óptico si existe)
+document.getElementById('zoom').addEventListener('click',e=>{
+  const z=e.target.closest('.z');if(!z)return;
+  document.querySelectorAll('.zoom .z').forEach(x=>x.classList.remove('on'));z.classList.add('on');
+  const zv=parseFloat(z.dataset.z);
+  const vtrack=stream&&stream.getVideoTracks()[0];
+  let optical=false;
+  if(vtrack&&vtrack.getCapabilities&&vtrack.getCapabilities().zoom){
+    const cap=vtrack.getCapabilities();const val=Math.min(cap.zoom.max,Math.max(cap.zoom.min,zv));
+    vtrack.applyConstraints({advanced:[{zoom:val}]}).then(()=>{}).catch(()=>{});optical=true;zoomLevel=1;
+  }
+  if(!optical) zoomLevel = zv<1?1:zv; // digital solo acerca
+});
+
+// chevron
+document.getElementById('chev').addEventListener('click',()=>{
+  document.getElementById('tools').classList.toggle('hidden');
+  document.getElementById('chev').classList.toggle('open');
+});
+
+// flash
+document.getElementById('flashBtn').addEventListener('click',function(){
+  const vtrack=stream&&stream.getVideoTracks()[0];
+  if(vtrack&&vtrack.getCapabilities&&vtrack.getCapabilities().torch){
+    const on=!this.classList.contains('on');
+    vtrack.applyConstraints({advanced:[{torch:on}]}).then(()=>this.classList.toggle('on')).catch(()=>alert('No pude controlar el flash.'));
+  }else alert('Tu cámara no permite flash desde el navegador (normal en muchos teléfonos).');
+});
+
+// timer
+document.getElementById('timerBtn').addEventListener('click',function(){
+  timerSec=timerSec===0?3:timerSec===3?10:0;this.classList.toggle('on',timerSec>0);
+  this.querySelector('svg').innerHTML=timerSec>0?('<text x="12" y="16" text-anchor="middle" font-size="11" fill="#F23B8C" font-family="Poppins">'+timerSec+'</text>'):'<circle cx="12" cy="12" r="9"></circle><path d="M12 8v4l3 2"></path>';
+});
+function runTimer(cb){let n=timerSec;const f=document.getElementById('recipeFlash');
+  const tick=()=>{f.textContent=n;f.classList.remove('go');void f.offsetWidth;f.classList.add('go');
+    if(n<=0){cb();return;}n--;setTimeout(tick,1000);};tick();}
+
+// grid
+document.getElementById('gridBtn').addEventListener('click',function(){this.classList.toggle('on');
+  let g=document.getElementById('gridlines');
+  if(!g){g=document.createElement('div');g.id='gridlines';g.style.cssText='position:absolute;inset:0;z-index:6;pointer-events:none;';
+    g.innerHTML='<div style="position:absolute;left:33.3%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div><div style="position:absolute;left:66.6%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div><div style="position:absolute;top:33.3%;left:0;right:0;height:1px;background:rgba(255,255,255,.25)"></div><div style="position:absolute;top:66.6%;left:0;right:0;height:1px;background:rgba(255,255,255,.25)"></div>';
+    document.querySelector('.phone').appendChild(g);}
+  g.style.display=this.classList.contains('on')?'block':'none';});
+
+// modos
+document.getElementById('modes').addEventListener('click',e=>{const m=e.target.closest('.md');if(!m)return;
+  document.querySelectorAll('.modes .md').forEach(x=>x.classList.remove('on'));m.classList.add('on');
+  photoMode=m.dataset.m==='photo';startCamera();});
+
+// galería
+document.getElementById('galBtn').addEventListener('click',()=>{if(!lastPhoto)return;
+  const v=document.getElementById('viewer');v.classList.add('on');const vimg=document.getElementById('vimg');
+  vimg.innerHTML=lastIsVideo?`<video src="${lastPhoto}" controls autoplay></video>`:`<img src="${lastPhoto}">`;});
+document.getElementById('closeViewer').addEventListener('click',()=>document.getElementById('viewer').classList.remove('on'));
+document.getElementById('dlBtn').addEventListener('click',()=>{if(!lastPhoto)return;
+  const a=document.createElement('a');a.href=lastPhoto;a.download=lastIsVideo?'foto-film.webm':'foto-film.jpg';a.click();});
+
+bdot.style.left='44%';
+
+// ===== DIAL DE TEMPERATURA =====
+const tempPanel=document.getElementById('tempPanel');
+const tempKnob=document.getElementById('tempKnob');
+const tempValEl=document.getElementById('tempVal');
+const tempDialSvg=document.getElementById('tempDialSvg');
+document.getElementById('tempBtn').addEventListener('click',()=>{tempPanel.classList.add('on');drawKnob();});
+tempPanel.addEventListener('click',e=>{if(e.target===tempPanel)tempPanel.classList.remove('on');});
+document.getElementById('tempReset').addEventListener('click',()=>{userTemp=0;drawKnob();});
+
+// userTemp va de -0.08 (frío) a +0.08 (cálido). El arco cubre 270°.
+function drawKnob(){
+  const t=userTemp/0.08; // -1..1
+  const ang=(-135+ (t+1)/2*270) * Math.PI/180; // -135° a +135°
+  const cx=100,cy=100,r=78;
+  const kx=cx+Math.sin(ang)*r, ky=cy-Math.cos(ang)*r;
+  tempKnob.setAttribute('cx',kx.toFixed(1));
+  tempKnob.setAttribute('cy',ky.toFixed(1));
+  const disp=Math.round(t*100);
+  tempValEl.textContent=(disp>0?'+':'')+disp;
+}
+function setTempFromPoint(clientX,clientY){
+  const rect=tempDialSvg.getBoundingClientRect();
+  const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+  let ang=Math.atan2(clientX-cx, -(clientY-cy)); // 0 arriba, + a la derecha
+  let deg=ang*180/Math.PI; // -180..180
+  deg=Math.max(-135,Math.min(135,deg));
+  const t=(deg+135)/270*2-1; // -1..1
+  userTemp=t*0.08;
+  drawKnob();
+}
+let tdrag=false;
+tempDialSvg.addEventListener('touchstart',e=>{tdrag=true;const t=e.touches[0];setTempFromPoint(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+tempDialSvg.addEventListener('touchmove',e=>{if(tdrag){const t=e.touches[0];setTempFromPoint(t.clientX,t.clientY);e.preventDefault();}},{passive:false});
+tempDialSvg.addEventListener('touchend',()=>tdrag=false);
+tempDialSvg.addEventListener('mousedown',e=>{tdrag=true;setTempFromPoint(e.clientX,e.clientY);});
+window.addEventListener('mousemove',e=>{if(tdrag)setTempFromPoint(e.clientX,e.clientY);});
+window.addEventListener('mouseup',()=>tdrag=false);
+drawKnob();
+</script>
+</body>
+</html>
